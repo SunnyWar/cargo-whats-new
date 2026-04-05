@@ -1,5 +1,6 @@
 use anyhow::Result;
 use cargo_metadata::MetadataCommand;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -83,6 +84,39 @@ fn load_metadata_from_path(path: &std::path::Path) -> Result<cargo_metadata::Met
     Ok(metadata)
 }
 
+fn diff_package_versions(
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+) {
+    // Map (name, source) -> version for both sets
+    let mut orig_map: HashMap<(&str, Option<String>), String> = HashMap::new();
+    for pkg in original {
+        let key = (
+            pkg.name.as_str(),
+            pkg.source.as_ref().map(|s| s.to_string()),
+        );
+        let version = pkg.version.to_string();
+        orig_map.insert(key, version);
+    }
+    let mut updated_map: HashMap<(&str, Option<String>), String> = HashMap::new();
+    for pkg in updated {
+        let key = (
+            pkg.name.as_str(),
+            pkg.source.as_ref().map(|s| s.to_string()),
+        );
+        let version = pkg.version.to_string();
+        updated_map.insert(key, version);
+    }
+    println!("\nDependency changes (old → new):");
+    for (key, old_ver) in &orig_map {
+        if let Some(new_ver) = updated_map.get(key) {
+            if old_ver != new_ver {
+                println!("- {} ({} → {})", key.0, old_ver, new_ver);
+            }
+        }
+    }
+}
+
 fn main() -> Result<()> {
     // Load metadata for the current workspace
     let metadata = MetadataCommand::new().exec()?;
@@ -99,7 +133,7 @@ fn main() -> Result<()> {
     let updated_metadata = load_metadata_from_path(temp_dir.path())?;
 
     println!("\nPackages (original):");
-    for pkg in metadata.packages {
+    for pkg in &metadata.packages {
         println!(
             "- {} {} ({})",
             pkg.name,
@@ -109,7 +143,7 @@ fn main() -> Result<()> {
     }
 
     println!("\nPackages (after update):");
-    for pkg in updated_metadata.packages {
+    for pkg in &updated_metadata.packages {
         println!(
             "- {} {} ({})",
             pkg.name,
@@ -117,6 +151,9 @@ fn main() -> Result<()> {
             pkg.manifest_path.as_str()
         );
     }
+
+    // Step 4: Diff before/after versions
+    diff_package_versions(&metadata.packages, &updated_metadata.packages);
 
     Ok(())
 }
