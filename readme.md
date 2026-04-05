@@ -1,18 +1,19 @@
 ## cargo-whats-new
 
-**cargo-whats-new** is a Cargo subcommand that inspects your project's current dependency graph. It is designed to eventually show you what would change if you ran `cargo update` — without modifying your real project.
+**cargo-whats-new** is a Cargo subcommand that inspects your project's current dependency graph and can now create a temporary workspace with your `Cargo.toml` and `Cargo.lock` files. This is the first step toward simulating what would change if you ran `cargo update` — without modifying your real project.
 
 ---
 
 ### Project Status
 
-> **Early development:** Only basic inspection of the dependency graph is implemented. Update simulation and diffing are not yet available.
+> **Early development:** The tool now creates a reproducible temporary workspace and copies the manifest and lock files. Update simulation and diffing are not yet available, but the foundation is in place.
 
 ---
 
 ## Current Capabilities (Implemented)
 - Loads and inspects your project’s current dependency graph using [`cargo_metadata`](https://docs.rs/cargo_metadata/)
 - Prints the workspace root and lists all packages (name, version, manifest path)
+- Creates a temporary workspace and copies `Cargo.toml` and `Cargo.lock` into it
 - Runs as a Cargo subcommand (`cargo whats-new`) once installed
 
 **Note:** The tool does _not_ yet simulate updates or produce diffs. Those features are under active development.
@@ -20,8 +21,6 @@
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Simulate dependency updates in a reproducible temporary workspace
-- Copy only the minimal required files (`Cargo.toml` and `Cargo.lock`)
 - Run `cargo update` inside the temp workspace
 - Load the updated dependency graph
 - Diff the before/after versions
