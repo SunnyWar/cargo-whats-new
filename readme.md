@@ -18,12 +18,13 @@ This simulates what would change if you ran `cargo update` — without modifying
 
 ## Current Capabilities (Implemented)
 - Loads and inspects your project’s current dependency graph using [`cargo_metadata`](https://docs.rs/cargo_metadata/)
-- Prints the workspace root and lists all packages (name, version, manifest path)
 - Creates a temporary workspace and copies `Cargo.toml`, `Cargo.lock`, and the `src` directory into it
 - Runs `cargo update` in the temporary workspace
 - Loads and displays the updated dependency graph from the temp workspace
 - Diffs and reports which dependencies would be updated (old → new)
 - Runs as a Cargo subcommand (`cargo whats-new`) once installed
+- **Minimal output by default:** Only a summary of updated dependencies is shown.
+- **Verbose output:** Use `-v` or `--verbose` to see detailed package lists, diffs, and repository URLs.
 
 **Note:** The tool does _not_ yet show changelogs, repository links, or machine-readable output. Those features are under active development.
 
