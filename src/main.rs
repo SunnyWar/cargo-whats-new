@@ -230,20 +230,39 @@ fn print_changelog_links(
             if orig_pkg.version != pkg.version {
                 if let Some(repo) = &pkg.repository {
                     if repo.contains("github.com") {
-                        // Remove .git suffix and trailing slashes
                         let mut repo_url = repo
                             .trim_end_matches(".git")
                             .trim_end_matches('/')
                             .to_string();
-                        // If repo_url contains /tree/ or /blob/, strip everything after that
                         if let Some(idx) = repo_url.find("/tree/") {
                             repo_url.truncate(idx);
                         } else if let Some(idx) = repo_url.find("/blob/") {
                             repo_url.truncate(idx);
                         }
-                        // Only append /blob/master/CHANGELOG.md if not already in a subdir
-                        let changelog_url = format!("{}/blob/master/CHANGELOG.md", repo_url);
-                        println!("- {}: {}", pkg.name, changelog_url);
+                        let branches = ["main", "master"];
+                        let mut found = false;
+                        for branch in &branches {
+                            let changelog_url =
+                                format!("{}/blob/{}/CHANGELOG.md", repo_url, branch);
+                            // Check if the link exists by trying the raw URL
+                            let raw_url = repo_url.replace(
+                                "https://github.com/",
+                                "https://raw.githubusercontent.com/",
+                            ) + &format!("/{}/CHANGELOG.md", branch);
+                            if let Ok(resp) = reqwest::blocking::get(&raw_url) {
+                                if resp.status().is_success() {
+                                    println!("- {}: {}", pkg.name, changelog_url);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if !found {
+                            println!(
+                                "- {}: <could not find CHANGELOG.md on main or master>",
+                                pkg.name
+                            );
+                        }
                     } else {
                         println!("- {}: <no GitHub repository>", pkg.name);
                     }
@@ -405,21 +424,38 @@ fn print_changelog_diff_for_crate(
                     if resp.status().is_success() {
                         if let Ok(text) = resp.text() {
                             println!("Changelog diff for {}:", updated.name);
-                            let from = orig.version.to_string();
                             let to = updated.version.to_string();
-                            let mut lines = text.lines();
+                            // Use regex to match flexible version headers
+                            let re = regex::Regex::new(&format!(
+                                r"^#+\s*\[?v?{}\]?\s*$",
+                                regex::escape(&to)
+                            ))
+                            .unwrap();
+                            let mut lines = text.lines().peekable();
                             let mut printing = false;
                             let mut count = 0;
                             while let Some(line) = lines.next() {
-                                if line.contains(&to) {
-                                    printing = true;
-                                } else if printing && line.starts_with('#') && !line.contains(&to) {
-                                    break;
-                                }
-                                if printing {
+                                if !printing {
+                                    if re.is_match(line) {
+                                        printing = true;
+                                        println!("    {}", line);
+                                        count += 1;
+                                    }
+                                } else {
+                                    // Stop at the next version header (starts with # and a digit)
+                                    if let Some(next_line) = lines.peek() {
+                                        if next_line.trim_start().starts_with('#') {
+                                            // Next version header: e.g. # 2.10.0, ## [2.10.0], etc.
+                                            let next_header_re =
+                                                regex::Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
+                                            if next_header_re.is_match(next_line.trim_start()) {
+                                                break;
+                                            }
+                                        }
+                                    }
                                     println!("    {}", line);
                                     count += 1;
-                                    if count >= 20 {
+                                    if count >= 100 {
                                         break;
                                     }
                                 }
