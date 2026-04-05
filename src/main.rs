@@ -188,6 +188,32 @@ fn print_crate_repositories(updated: &[cargo_metadata::Package], verbose: bool) 
     }
 }
 
+fn print_github_compare_links(
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+    verbose: bool,
+) {
+    if !verbose {
+        return;
+    }
+    println!("\nGitHub compare links for updated crates:");
+    for pkg in updated {
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
+            if orig_pkg.version != pkg.version {
+                if let Some(repo) = &pkg.repository {
+                    if repo.contains("github.com") {
+                        // Try to construct a compare link
+                        let from = orig_pkg.version.to_string();
+                        let to = pkg.version.to_string();
+                        let repo_url = repo.trim_end_matches(".git");
+                        println!("- {}: {}/compare/v{}...v{}", pkg.name, repo_url, from, to);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let verbose = env::args().any(|arg| arg == "-v" || arg == "--verbose");
     // Load metadata for the current workspace
@@ -227,6 +253,8 @@ fn main() -> Result<()> {
     report_updated_crates(&metadata.packages, &updated_metadata.packages, verbose);
     // Step 6: Print repository URLs for all updated packages
     print_crate_repositories(&updated_metadata.packages, verbose);
+    // Step 7: Print GitHub compare links for updated packages
+    print_github_compare_links(&metadata.packages, &updated_metadata.packages, verbose);
     // Minimal output: just show summary of updated crates
     if !verbose {
         let mut changed = Vec::new();
