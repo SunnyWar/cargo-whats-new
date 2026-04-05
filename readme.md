@@ -1,28 +1,33 @@
 ## cargo-whats-new
 
-**cargo-whats-new** is a Cargo subcommand that inspects your project's current dependency graph and can now create a temporary workspace with your `Cargo.toml` and `Cargo.lock` files. This is the first step toward simulating what would change if you ran `cargo update` — without modifying your real project.
+**cargo-whats-new** is a Cargo subcommand that inspects your project's current dependency graph and can now:
+- Create a temporary workspace with your `Cargo.toml`, `Cargo.lock`, and `src` directory
+- Run `cargo update` in the temporary workspace
+- Load and display the updated dependency graph
+
+This is the foundation for simulating what would change if you ran `cargo update` — without modifying your real project.
 
 ---
 
 ### Project Status
 
-> **Early development:** The tool now creates a reproducible temporary workspace and copies the manifest and lock files. Update simulation and diffing are not yet available, but the foundation is in place.
+> **Early development:** The tool now creates a reproducible temporary workspace, copies the manifest, lock file, and source directory, runs `cargo update`, and loads the updated dependency graph. Diffing and reporting are the next steps.
 
 ---
 
 ## Current Capabilities (Implemented)
 - Loads and inspects your project’s current dependency graph using [`cargo_metadata`](https://docs.rs/cargo_metadata/)
 - Prints the workspace root and lists all packages (name, version, manifest path)
-- Creates a temporary workspace and copies `Cargo.toml` and `Cargo.lock` into it
+- Creates a temporary workspace and copies `Cargo.toml`, `Cargo.lock`, and the `src` directory into it
+- Runs `cargo update` in the temporary workspace
+- Loads and displays the updated dependency graph from the temp workspace
 - Runs as a Cargo subcommand (`cargo whats-new`) once installed
 
-**Note:** The tool does _not_ yet simulate updates or produce diffs. Those features are under active development.
+**Note:** The tool does _not_ yet diff or report changes between the original and updated dependency graphs. Those features are under active development.
 
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Run `cargo update` inside the temp workspace
-- Load the updated dependency graph
 - Diff the before/after versions
 - Show which crates would be updated
 - Show version changes (old → new)
@@ -70,6 +75,6 @@ cargo whats-new
 ---
 
 ## Status
-This project is at the “scaffolding and architecture” stage. The next major milestone is implementing the temporary‑workspace update simulation and version diffing.
+This project is at the “scaffolding and architecture” stage. The next major milestone is implementing the diffing and reporting of dependency changes.
 
 Contributions, ideas, and issue reports are welcome.
