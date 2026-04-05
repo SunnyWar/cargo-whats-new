@@ -28,14 +28,11 @@ This simulates what would change if you ran `cargo update` — without modifying
 - Runs as a Cargo subcommand (`cargo whats-new`) once installed
 - **Minimal output by default:** Only a summary of updated dependencies is shown.
 - **Verbose output:** Use `-v` or `--verbose` to see detailed package lists, diffs, repository URLs, GitHub compare links, and changelog entries.
-
-**Note:** The tool does _not_ yet show changelogs, repository links, or machine-readable output. Those features are under active development.
+- **Single crate mode:** Run `cargo whats-new <crate>` to see only the version change and changelog diff for that crate, even without `--verbose`.
 
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Locate changelogs automatically
-- Extract changelog entries automatically
 - Markdown and JSON output modes
 - CI‑friendly machine‑readable reports
 - Optional GitHub API integration for richer release notes

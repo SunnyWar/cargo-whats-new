@@ -345,11 +345,118 @@ fn print_changelog_entries_placeholder(verbose: bool) {
     );
 }
 
+fn print_single_crate_update(
+    crate_name: &str,
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+    verbose: bool,
+) {
+    let orig_pkg = original.iter().find(|p| p.name == crate_name);
+    let updated_pkg = updated.iter().find(|p| p.name == crate_name);
+    match (orig_pkg, updated_pkg) {
+        (Some(orig), Some(updated)) => {
+            if orig.version != updated.version {
+                println!("{}: {} → {}", crate_name, orig.version, updated.version);
+                // Always print changelog diff for this crate, regardless of verbose
+                print_changelog_diff_for_crate(orig, updated, true);
+            } else {
+                println!("{}: no version change ({}).", crate_name, orig.version);
+            }
+        }
+        (None, Some(updated)) => {
+            println!("{}: newly added at version {}", crate_name, updated.version);
+            print_changelog_diff_for_crate(updated, updated, true);
+        }
+        (Some(orig), None) => {
+            println!("{}: removed (was at version {})", crate_name, orig.version);
+        }
+        (None, None) => {
+            println!("{}: not found in either lockfile", crate_name);
+        }
+    }
+}
+
+fn print_changelog_diff_for_crate(
+    orig: &cargo_metadata::Package,
+    updated: &cargo_metadata::Package,
+    verbose: bool,
+) {
+    if !verbose {
+        return;
+    }
+    if let Some(repo) = &updated.repository {
+        if repo.contains("github.com") {
+            let mut repo_url = repo
+                .trim_end_matches(".git")
+                .trim_end_matches('/')
+                .to_string();
+            if let Some(idx) = repo_url.find("/tree/") {
+                repo_url.truncate(idx);
+            } else if let Some(idx) = repo_url.find("/blob/") {
+                repo_url.truncate(idx);
+            }
+            let branches = ["master", "main"];
+            let mut found = false;
+            for branch in &branches {
+                let raw_url = repo_url
+                    .replace("https://github.com/", "https://raw.githubusercontent.com/")
+                    + &format!("/{}/CHANGELOG.md", branch);
+                if let Ok(resp) = reqwest::blocking::get(&raw_url) {
+                    if resp.status().is_success() {
+                        if let Ok(text) = resp.text() {
+                            println!("Changelog diff for {}:", updated.name);
+                            let from = orig.version.to_string();
+                            let to = updated.version.to_string();
+                            let mut lines = text.lines();
+                            let mut printing = false;
+                            let mut count = 0;
+                            while let Some(line) = lines.next() {
+                                if line.contains(&to) {
+                                    printing = true;
+                                } else if printing && line.starts_with('#') && !line.contains(&to) {
+                                    break;
+                                }
+                                if printing {
+                                    println!("    {}", line);
+                                    count += 1;
+                                    if count >= 20 {
+                                        break;
+                                    }
+                                }
+                            }
+                            if !printing {
+                                println!(
+                                    "    (Could not find changelog section for version {})",
+                                    to
+                                );
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !found {
+                println!("    <could not fetch or parse changelog>");
+            }
+        } else {
+            println!("    <no GitHub repository>");
+        }
+    } else {
+        println!("    <no repository specified>");
+    }
+}
+
 fn main() -> Result<()> {
-    let verbose = env::args().any(|arg| arg == "-v" || arg == "--verbose");
+    let mut args = env::args().skip(1).collect::<Vec<_>>();
+    let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
+    // Only treat a non-flag argument as a crate name if it is not the subcommand name
+    let crate_arg = args
+        .iter()
+        .find(|a| !a.starts_with('-') && a != &"whats-new")
+        .cloned();
     // Load metadata for the current workspace
     let metadata = MetadataCommand::new().exec()?;
-
     println!("Workspace root: {}", metadata.workspace_root);
     // Step 1: Create temp workspace and copy files
     let temp_dir = setup_temp_workspace(metadata.workspace_root.as_str(), verbose)?;
@@ -357,26 +464,14 @@ fn main() -> Result<()> {
     run_cargo_update(temp_dir.path(), verbose)?;
     // Step 3: Load updated dependency graph from temp workspace
     let updated_metadata = load_metadata_from_path(temp_dir.path(), verbose)?;
-
-    if verbose {
-        println!("\nPackages (original):");
-        for pkg in &metadata.packages {
-            println!(
-                "- {} {} ({})",
-                pkg.name,
-                pkg.version,
-                pkg.manifest_path.as_str()
-            );
-        }
-        println!("\nPackages (after update):");
-        for pkg in &updated_metadata.packages {
-            println!(
-                "- {} {} ({})",
-                pkg.name,
-                pkg.version,
-                pkg.manifest_path.as_str()
-            );
-        }
+    if let Some(crate_name) = crate_arg {
+        print_single_crate_update(
+            &crate_name,
+            &metadata.packages,
+            &updated_metadata.packages,
+            verbose,
+        );
+        return Ok(());
     }
     // Step 4: Diff before/after versions
     diff_package_versions(&metadata.packages, &updated_metadata.packages, verbose);
