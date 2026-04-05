@@ -214,6 +214,45 @@ fn print_github_compare_links(
     }
 }
 
+fn print_changelog_links(
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+    verbose: bool,
+) {
+    if !verbose {
+        return;
+    }
+    println!("\nGuessed changelog links for updated crates:");
+    for pkg in updated {
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
+            if orig_pkg.version != pkg.version {
+                if let Some(repo) = &pkg.repository {
+                    if repo.contains("github.com") {
+                        // Remove .git suffix and trailing slashes
+                        let mut repo_url = repo
+                            .trim_end_matches(".git")
+                            .trim_end_matches('/')
+                            .to_string();
+                        // If repo_url contains /tree/ or /blob/, strip everything after that
+                        if let Some(idx) = repo_url.find("/tree/") {
+                            repo_url.truncate(idx);
+                        } else if let Some(idx) = repo_url.find("/blob/") {
+                            repo_url.truncate(idx);
+                        }
+                        // Only append /blob/master/CHANGELOG.md if not already in a subdir
+                        let changelog_url = format!("{}/blob/master/CHANGELOG.md", repo_url);
+                        println!("- {}: {}", pkg.name, changelog_url);
+                    } else {
+                        println!("- {}: <no GitHub repository>", pkg.name);
+                    }
+                } else {
+                    println!("- {}: <no repository specified>", pkg.name);
+                }
+            }
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let verbose = env::args().any(|arg| arg == "-v" || arg == "--verbose");
     // Load metadata for the current workspace
@@ -255,6 +294,8 @@ fn main() -> Result<()> {
     print_crate_repositories(&updated_metadata.packages, verbose);
     // Step 7: Print GitHub compare links for updated packages
     print_github_compare_links(&metadata.packages, &updated_metadata.packages, verbose);
+    // Step 8: Print guessed changelog links for updated packages
+    print_changelog_links(&metadata.packages, &updated_metadata.packages, verbose);
     // Minimal output: just show summary of updated crates
     if !verbose {
         let mut changed = Vec::new();

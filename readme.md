@@ -33,9 +33,7 @@ This simulates what would change if you ran `cargo update` — without modifying
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Identify each crate’s repository
 - Locate changelogs automatically
-- Generate GitHub compare links for each version bump
 - Extract changelog entries automatically
 - Markdown and JSON output modes
 - CI‑friendly machine‑readable reports
