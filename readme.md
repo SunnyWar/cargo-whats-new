@@ -30,8 +30,6 @@ This simulates what would change if you ran `cargo update` — without modifying
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Show which crates would be updated
-- Show version changes (old → new)
 - Identify each crate’s repository
 - Locate changelogs automatically
 - Generate GitHub compare links for each version bump
