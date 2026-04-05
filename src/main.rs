@@ -6,6 +6,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
+// Add to Cargo.toml:
+// reqwest = { version = "0.11", features = ["blocking"] }
 
 fn setup_temp_workspace(workspace_root: &str, verbose: bool) -> Result<tempfile::TempDir> {
     use std::fs;
@@ -253,6 +255,96 @@ fn print_changelog_links(
     }
 }
 
+fn print_changelog_entries(
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+    verbose: bool,
+) {
+    if !verbose {
+        return;
+    }
+    println!("\nExtracted changelog entries for updated crates:");
+    for pkg in updated {
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
+            if orig_pkg.version != pkg.version {
+                if let Some(repo) = &pkg.repository {
+                    if repo.contains("github.com") {
+                        let mut repo_url = repo
+                            .trim_end_matches(".git")
+                            .trim_end_matches('/')
+                            .to_string();
+                        if let Some(idx) = repo_url.find("/tree/") {
+                            repo_url.truncate(idx);
+                        } else if let Some(idx) = repo_url.find("/blob/") {
+                            repo_url.truncate(idx);
+                        }
+                        // Try master and main branches
+                        let branches = ["master", "main"];
+                        let mut found = false;
+                        for branch in &branches {
+                            let raw_url = repo_url.replace(
+                                "https://github.com/",
+                                "https://raw.githubusercontent.com/",
+                            ) + &format!("/{}/CHANGELOG.md", branch);
+                            if let Ok(resp) = reqwest::blocking::get(&raw_url) {
+                                if resp.status().is_success() {
+                                    if let Ok(text) = resp.text() {
+                                        println!("- {}:", pkg.name);
+                                        // Try to find the section for the new version
+                                        let version_header = format!("{}", pkg.version);
+                                        let mut lines = text.lines();
+                                        let mut printing = false;
+                                        let mut count = 0;
+                                        while let Some(line) = lines.next() {
+                                            if line.contains(&version_header) {
+                                                printing = true;
+                                            } else if printing && line.starts_with('#') {
+                                                break;
+                                            }
+                                            if printing {
+                                                println!("    {}", line);
+                                                count += 1;
+                                                if count >= 10 {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if !printing {
+                                            // Print the first 10 lines as fallback
+                                            for line in text.lines().take(10) {
+                                                println!("    {}", line);
+                                            }
+                                        }
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if !found {
+                            println!("- {}: <could not fetch or parse changelog>", pkg.name);
+                        }
+                    } else {
+                        println!("- {}: <no GitHub repository>", pkg.name);
+                    }
+                } else {
+                    println!("- {}: <no repository specified>", pkg.name);
+                }
+            }
+        }
+    }
+}
+
+fn print_changelog_entries_placeholder(verbose: bool) {
+    if !verbose {
+        return;
+    }
+    println!("\n[TODO] Extracted changelog entries for updated crates:");
+    println!(
+        "(This feature is not yet implemented. In the future, this will show the actual changelog entries for each updated crate.)"
+    );
+}
+
 fn main() -> Result<()> {
     let verbose = env::args().any(|arg| arg == "-v" || arg == "--verbose");
     // Load metadata for the current workspace
@@ -296,6 +388,8 @@ fn main() -> Result<()> {
     print_github_compare_links(&metadata.packages, &updated_metadata.packages, verbose);
     // Step 8: Print guessed changelog links for updated packages
     print_changelog_links(&metadata.packages, &updated_metadata.packages, verbose);
+    // Step 9: Extract and print changelog entries for updated packages
+    print_changelog_entries(&metadata.packages, &updated_metadata.packages, verbose);
     // Minimal output: just show summary of updated crates
     if !verbose {
         let mut changed = Vec::new();
