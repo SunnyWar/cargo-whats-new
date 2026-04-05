@@ -1,0 +1,16 @@
+/target/
+**/*.rs.bk
+Cargo.lock
+# VS Code
+.vscode/
+*.code-workspace
+# Misc
+*.log
+*.tmp
+*.swp
+.DS_Store
+.idea/
+*.iml
+# By-products
+*.d
+*.dll.exp
