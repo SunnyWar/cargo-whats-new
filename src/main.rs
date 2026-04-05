@@ -117,6 +117,37 @@ fn diff_package_versions(
     }
 }
 
+fn report_updated_crates(
+    original: &[cargo_metadata::Package],
+    updated: &[cargo_metadata::Package],
+) {
+    use std::collections::HashSet;
+    let orig_set: HashSet<_> = original.iter().map(|p| p.name.as_str()).collect();
+    let updated_set: HashSet<_> = updated.iter().map(|p| p.name.as_str()).collect();
+    let updated_crates: Vec<_> = updated_set.difference(&orig_set).collect();
+    if !updated_crates.is_empty() {
+        println!("\nNew crates added after update:");
+        for &name in &updated_crates {
+            println!("- {}", name);
+        }
+    }
+    // List crates that changed version (already shown in diff), but also print a summary
+    let mut changed = Vec::new();
+    for pkg in updated {
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
+            if orig_pkg.version != pkg.version {
+                changed.push((&pkg.name, &orig_pkg.version, &pkg.version));
+            }
+        }
+    }
+    if !changed.is_empty() {
+        println!("\nCrates updated:");
+        for (name, old, new) in changed {
+            println!("- {} ({} → {})", name, old, new);
+        }
+    }
+}
+
 fn main() -> Result<()> {
     // Load metadata for the current workspace
     let metadata = MetadataCommand::new().exec()?;
@@ -154,6 +185,8 @@ fn main() -> Result<()> {
 
     // Step 4: Diff before/after versions
     diff_package_versions(&metadata.packages, &updated_metadata.packages);
+    // Step 5: Report which crates were updated or added
+    report_updated_crates(&metadata.packages, &updated_metadata.packages);
 
     Ok(())
 }

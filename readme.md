@@ -4,14 +4,15 @@
 - Create a temporary workspace with your `Cargo.toml`, `Cargo.lock`, and `src` directory
 - Run `cargo update` in the temporary workspace
 - Load and display the updated dependency graph
+- Diff and report which dependencies would be updated (old → new)
 
-This is the foundation for simulating what would change if you ran `cargo update` — without modifying your real project.
+This simulates what would change if you ran `cargo update` — without modifying your real project.
 
 ---
 
 ### Project Status
 
-> **Early development:** The tool now creates a reproducible temporary workspace, copies the manifest, lock file, and source directory, runs `cargo update`, and loads the updated dependency graph. Diffing and reporting are the next steps.
+> **Early development:** The tool now creates a reproducible temporary workspace, copies the manifest, lock file, and source directory, runs `cargo update`, loads the updated dependency graph, and reports dependency version changes. Further reporting and changelog features are planned.
 
 ---
 
@@ -21,14 +22,14 @@ This is the foundation for simulating what would change if you ran `cargo update
 - Creates a temporary workspace and copies `Cargo.toml`, `Cargo.lock`, and the `src` directory into it
 - Runs `cargo update` in the temporary workspace
 - Loads and displays the updated dependency graph from the temp workspace
+- Diffs and reports which dependencies would be updated (old → new)
 - Runs as a Cargo subcommand (`cargo whats-new`) once installed
 
-**Note:** The tool does _not_ yet diff or report changes between the original and updated dependency graphs. Those features are under active development.
+**Note:** The tool does _not_ yet show changelogs, repository links, or machine-readable output. Those features are under active development.
 
 ---
 
 ## Planned Features (Not Yet Implemented)
-- Diff the before/after versions
 - Show which crates would be updated
 - Show version changes (old → new)
 - Identify each crate’s repository
@@ -75,6 +76,6 @@ cargo whats-new
 ---
 
 ## Status
-This project is at the “scaffolding and architecture” stage. The next major milestone is implementing the diffing and reporting of dependency changes.
+This project is at the “scaffolding and architecture” stage. The next major milestone is implementing richer reporting and changelog integration.
 
 Contributions, ideas, and issue reports are welcome.
