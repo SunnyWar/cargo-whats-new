@@ -148,6 +148,17 @@ fn report_updated_crates(
     }
 }
 
+fn print_crate_repositories(updated: &[cargo_metadata::Package]) {
+    println!("\nCrate repositories (after update):");
+    for pkg in updated {
+        if let Some(repo) = &pkg.repository {
+            println!("- {}: {}", pkg.name, repo);
+        } else {
+            println!("- {}: <no repository specified>", pkg.name);
+        }
+    }
+}
+
 fn main() -> Result<()> {
     // Load metadata for the current workspace
     let metadata = MetadataCommand::new().exec()?;
@@ -187,6 +198,8 @@ fn main() -> Result<()> {
     diff_package_versions(&metadata.packages, &updated_metadata.packages);
     // Step 5: Report which crates were updated or added
     report_updated_crates(&metadata.packages, &updated_metadata.packages);
+    // Step 6: Print repository URLs for all updated packages
+    print_crate_repositories(&updated_metadata.packages);
 
     Ok(())
 }
