@@ -75,6 +75,14 @@ fn run_cargo_update(temp_path: &std::path::Path) -> Result<()> {
     }
 }
 
+fn load_metadata_from_path(path: &std::path::Path) -> Result<cargo_metadata::Metadata> {
+    let mut cmd = MetadataCommand::new();
+    cmd.current_dir(path);
+    let metadata = cmd.exec()?;
+    println!("[DEBUG] Loaded updated dependency graph from temp workspace.");
+    Ok(metadata)
+}
+
 fn main() -> Result<()> {
     // Load metadata for the current workspace
     let metadata = MetadataCommand::new().exec()?;
@@ -87,8 +95,21 @@ fn main() -> Result<()> {
     // Step 2: Run cargo update in temp workspace
     run_cargo_update(temp_dir.path())?;
 
-    println!("\nPackages:");
+    // Step 3: Load updated dependency graph from temp workspace
+    let updated_metadata = load_metadata_from_path(temp_dir.path())?;
+
+    println!("\nPackages (original):");
     for pkg in metadata.packages {
+        println!(
+            "- {} {} ({})",
+            pkg.name,
+            pkg.version,
+            pkg.manifest_path.as_str()
+        );
+    }
+
+    println!("\nPackages (after update):");
+    for pkg in updated_metadata.packages {
         println!(
             "- {} {} ({})",
             pkg.name,
