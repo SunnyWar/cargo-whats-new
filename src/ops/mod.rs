@@ -7,6 +7,7 @@ use std::fs;
 pub fn run_cargo_update(temp_path: &std::path::Path, verbose: bool) -> Result<()> {
     use std::process::{Command, Stdio};
     if verbose {
+        #[cfg(debug_assertions)]
         println!("\n[DEBUG] Running 'cargo update' in temp workspace...");
     }
     let mut cmd = Command::new("cargo");
@@ -17,6 +18,7 @@ pub fn run_cargo_update(temp_path: &std::path::Path, verbose: bool) -> Result<()
     let status = cmd.status()?;
     if status.success() {
         if verbose {
+            #[cfg(debug_assertions)]
             println!("[DEBUG] 'cargo update' completed successfully.");
         }
         Ok(())
@@ -33,6 +35,7 @@ pub fn load_metadata_from_path(
     cmd.current_dir(path);
     let metadata = cmd.exec()?;
     if verbose {
+        #[cfg(debug_assertions)]
         println!("[DEBUG] Loaded updated dependency graph from temp workspace.");
     }
     Ok(metadata)
@@ -419,10 +422,12 @@ fn fetch_github_release_tag_html(owner: &str, repo: &str, version: &str) -> Opti
             if resp.status().is_success() {
                 if let Ok(text) = resp.text() {
                     let _ = fs::write("release_debug.html", &text);
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "[DEBUG] Saved fetched HTML to release_debug.html ({} bytes)",
                         text.len()
                     );
+                    #[cfg(debug_assertions)]
                     eprintln!(
                         "[DEBUG] Fetched tag page: {} ({} bytes)",
                         tag_url,
@@ -438,6 +443,7 @@ fn fetch_github_release_tag_html(owner: &str, repo: &str, version: &str) -> Opti
                 );
             }
         } else {
+            #[cfg(debug_assertions)]
             eprintln!("[DEBUG] Error fetching tag page: {}", tag_url);
         }
     }
@@ -458,6 +464,7 @@ fn extract_markdown_body_blocks(html: &str) -> Vec<String> {
             break;
         }
     }
+    #[cfg(debug_assertions)]
     eprintln!("[DEBUG] Found {} markdown-body blocks", blocks.len());
     blocks
 }
@@ -477,6 +484,7 @@ fn extract_first_meaningful_block(blocks: &[String], version: &str) -> Option<St
     for block in blocks {
         let plain = html_to_plain_text(block);
         if plain.contains(version) && plain.len() > 20 {
+            #[cfg(debug_assertions)]
             eprintln!(
                 "[DEBUG] Selected markdown-body block with version ({} chars)",
                 plain.len()
@@ -489,6 +497,7 @@ fn extract_first_meaningful_block(blocks: &[String], version: &str) -> Option<St
     }
     best.map(|b| {
         let plain = html_to_plain_text(b);
+        #[cfg(debug_assertions)]
         eprintln!(
             "[DEBUG] Selected largest markdown-body block ({} chars)",
             plain.len()
@@ -506,6 +515,7 @@ fn extract_fallback_article_content(html: &str) -> Option<String> {
             let lines: Vec<_> = plain.lines().filter(|l| !l.trim().is_empty()).collect();
             if !lines.is_empty() {
                 let result = lines.join("\n");
+                #[cfg(debug_assertions)]
                 eprintln!("[DEBUG] Fallback article content ({} chars)", result.len());
                 return Some(result);
             }

@@ -36,11 +36,14 @@ pub fn setup_temp_workspace(workspace_root: &str, verbose: bool) -> Result<tempf
     }
 
     if verbose {
-        println!("\n[DEBUG] Files in temp workspace:");
-        for entry in fs::read_dir(temp_path)? {
-            let entry = entry?;
-            let path = entry.path();
-            println!("[DEBUG] - {}", path.display());
+        #[cfg(debug_assertions)]
+        {
+            println!("\n[DEBUG] Files in temp workspace:");
+            for entry in fs::read_dir(temp_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                println!("[DEBUG] - {}", path.display());
+            }
         }
     }
 

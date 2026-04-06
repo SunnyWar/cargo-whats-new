@@ -8,6 +8,7 @@ pub fn fetch_release_notes_from_github_api(
 ) -> Option<String> {
     let token = env::var("GITHUB_TOKEN").ok();
     if token.is_none() {
+        #[cfg(debug_assertions)]
         eprintln!("[DEBUG] No GITHUB_TOKEN set, skipping GitHub API for release notes");
         return None;
     }
@@ -29,25 +30,30 @@ pub fn fetch_release_notes_from_github_api(
                 if let Ok(json) = serde_json::from_str::<Value>(&text) {
                     if let Some(body) = json.get("body").and_then(|b| b.as_str()) {
                         if !body.trim().is_empty() {
+                            #[cfg(debug_assertions)]
                             eprintln!("[DEBUG] Got release notes from GitHub API");
                             return Some(body.trim().to_string());
                         }
                     }
                 } else {
+                    #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] Failed to parse GitHub API JSON");
                 }
             }
             Err(e) => {
+                #[cfg(debug_assertions)]
                 eprintln!("[DEBUG] Failed to read GitHub API response text: {}", e);
             }
         },
         Ok(resp) => {
+            #[cfg(debug_assertions)]
             eprintln!(
                 "[DEBUG] GitHub API request failed: status {}",
                 resp.status()
             );
         }
         Err(e) => {
+            #[cfg(debug_assertions)]
             eprintln!("[DEBUG] GitHub API request error: {}", e);
         }
     }
