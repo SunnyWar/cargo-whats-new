@@ -2,6 +2,7 @@ use anyhow::Result;
 use cargo_metadata::MetadataCommand;
 use regex::Regex;
 use std::collections::HashMap;
+use std::fs;
 
 pub fn run_cargo_update(temp_path: &std::path::Path, verbose: bool) -> Result<()> {
     use std::process::{Command, Stdio};
@@ -299,14 +300,14 @@ pub fn print_single_crate_update(
         (Some(orig), Some(updated)) => {
             if orig.version != updated.version {
                 println!("{}: {} → {}", crate_name, orig.version, updated.version);
-                print_changelog_diff_for_crate(orig, updated, true);
+                print_changelog_diff_for_crate_verbose(orig, updated, verbose, crate_name);
             } else {
                 println!("{}: no version change ({}).", crate_name, orig.version);
             }
         }
         (None, Some(updated)) => {
             println!("{}: newly added at version {}", crate_name, updated.version);
-            print_changelog_diff_for_crate(updated, updated, true);
+            print_changelog_diff_for_crate_verbose(updated, updated, verbose, crate_name);
         }
         (Some(orig), None) => {
             println!("{}: removed (was at version {})", crate_name, orig.version);
@@ -317,10 +318,11 @@ pub fn print_single_crate_update(
     }
 }
 
-fn print_changelog_diff_for_crate(
+fn print_changelog_diff_for_crate_verbose(
     orig: &cargo_metadata::Package,
     updated: &cargo_metadata::Package,
     verbose: bool,
+    crate_name: &str,
 ) {
     if !verbose {
         return;
@@ -347,9 +349,11 @@ fn print_changelog_diff_for_crate(
                         if let Ok(text) = resp.text() {
                             println!("Changelog diff for {}:", updated.name);
                             let to = updated.version.to_string();
-                            let re =
-                                Regex::new(&format!(r"^#+\s*\[?v?{}\]?\s*$", regex::escape(&to)))
-                                    .unwrap();
+                            let re = regex::Regex::new(&format!(
+                                r"^#+\s*\[?v?{}\]?\s*$",
+                                regex::escape(&to)
+                            ))
+                            .unwrap();
                             let mut lines = text.lines().peekable();
                             let mut printing = false;
                             let mut count = 0;
@@ -364,7 +368,7 @@ fn print_changelog_diff_for_crate(
                                     if let Some(next_line) = lines.peek() {
                                         if next_line.trim_start().starts_with('#') {
                                             let next_header_re =
-                                                Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
+                                                regex::Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
                                             if next_header_re.is_match(next_line.trim_start()) {
                                                 break;
                                             }
@@ -390,7 +394,14 @@ fn print_changelog_diff_for_crate(
                 }
             }
             if !found {
-                println!("    <could not fetch or parse changelog>");
+                // Try GitHub releases page as fallback
+                if let Some(notes) =
+                    try_fetch_github_release_notes(&repo_url, &updated.version.to_string())
+                {
+                    println!("- {} (from GitHub releases):\n{}", crate_name, notes);
+                } else {
+                    println!("- {}: <could not fetch or parse changelog>", crate_name);
+                }
             }
         } else {
             println!("    <no GitHub repository>");
@@ -400,37 +411,125 @@ fn print_changelog_diff_for_crate(
     }
 }
 
+fn fetch_github_release_tag_html(owner: &str, repo: &str, version: &str) -> Option<String> {
+    let tag_variants = [version.to_string(), format!("v{}", version)];
+    for tag in &tag_variants {
+        let tag_url = format!("https://github.com/{}/{}/releases/tag/{}", owner, repo, tag);
+        if let Ok(resp) = reqwest::blocking::get(&tag_url) {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text() {
+                    let _ = fs::write("release_debug.html", &text);
+                    eprintln!(
+                        "[DEBUG] Saved fetched HTML to release_debug.html ({} bytes)",
+                        text.len()
+                    );
+                    eprintln!(
+                        "[DEBUG] Fetched tag page: {} ({} bytes)",
+                        tag_url,
+                        text.len()
+                    );
+                    return Some(text);
+                }
+            } else {
+                eprintln!(
+                    "[DEBUG] Failed to fetch tag page: {} (status: {})",
+                    tag_url,
+                    resp.status()
+                );
+            }
+        } else {
+            eprintln!("[DEBUG] Error fetching tag page: {}", tag_url);
+        }
+    }
+    None
+}
+
+fn extract_markdown_body_blocks(html: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut offset = 0;
+    while let Some(start) = html[offset..].find("<div class=\"markdown-body") {
+        let abs_start = offset + start;
+        let after = &html[abs_start..];
+        if let Some(end) = after.find("</div>") {
+            let block = &after[..end + 6];
+            blocks.push(block.to_string());
+            offset = abs_start + end + 6;
+        } else {
+            break;
+        }
+    }
+    eprintln!("[DEBUG] Found {} markdown-body blocks", blocks.len());
+    blocks
+}
+
+fn html_to_plain_text(html: &str) -> String {
+    let plain = html.replace("<br>", "\n");
+    let plain = regex::Regex::new(r"<[^>]+>")
+        .unwrap()
+        .replace_all(&plain, "");
+    let plain = html_escape::decode_html_entities(&plain);
+    plain.trim().to_string()
+}
+
+fn extract_first_meaningful_block(blocks: &[String], version: &str) -> Option<String> {
+    // Prefer a block containing the version string, else the largest block
+    let mut best: Option<&String> = None;
+    for block in blocks {
+        let plain = html_to_plain_text(block);
+        if plain.contains(version) && plain.len() > 20 {
+            eprintln!(
+                "[DEBUG] Selected markdown-body block with version ({} chars)",
+                plain.len()
+            );
+            return Some(plain);
+        }
+        if best.is_none() || plain.len() > html_to_plain_text(best.unwrap()).len() {
+            best = Some(block);
+        }
+    }
+    best.map(|b| {
+        let plain = html_to_plain_text(b);
+        eprintln!(
+            "[DEBUG] Selected largest markdown-body block ({} chars)",
+            plain.len()
+        );
+        plain
+    })
+}
+
+fn extract_fallback_article_content(html: &str) -> Option<String> {
+    if let Some(start) = html.find("<article") {
+        let after = &html[start..];
+        if let Some(end) = after.find("</article>") {
+            let block = &after[..end + 10];
+            let plain = html_to_plain_text(block);
+            let lines: Vec<_> = plain.lines().filter(|l| !l.trim().is_empty()).collect();
+            if !lines.is_empty() {
+                let result = lines.join("\n");
+                eprintln!("[DEBUG] Fallback article content ({} chars)", result.len());
+                return Some(result);
+            }
+        }
+    }
+    None
+}
+
 fn try_fetch_github_release_notes(repo_url: &str, version: &str) -> Option<String> {
-    // Only handle github.com URLs
     if !repo_url.contains("github.com") {
         return None;
     }
-    // Extract owner/repo
     let parts: Vec<&str> = repo_url.trim_end_matches(".git").split('/').collect();
     if parts.len() < 5 {
         return None;
     }
     let owner = parts[3];
     let repo = parts[4];
-    let releases_url = format!("https://github.com/{}/{}/releases", owner, repo);
-    if let Ok(resp) = reqwest::blocking::get(&releases_url) {
-        if resp.status().is_success() {
-            if let Ok(text) = resp.text() {
-                // Try to find the release section for the version
-                let re = Regex::new(&format!(
-                    r#"(?s)##\s*{}[\s\S]*?(?=##|$)"#,
-                    regex::escape(version)
-                ))
-                .unwrap();
-                if let Some(mat) = re.find(&text) {
-                    let section = mat.as_str().trim();
-                    // Clean up markdown headers
-                    return Some(section.replace("\r", "").to_string());
-                }
-            }
-        }
+    let html = fetch_github_release_tag_html(owner, repo, version)?;
+    let blocks = extract_markdown_body_blocks(&html);
+    if let Some(plain) = extract_first_meaningful_block(&blocks, version) {
+        return Some(plain);
     }
-    None
+    extract_fallback_article_content(&html)
 }
 
 pub fn print_minimal_updated_crates(
