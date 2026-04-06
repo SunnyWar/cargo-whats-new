@@ -1,5 +1,6 @@
 use anyhow::Result;
 use cargo_metadata::MetadataCommand;
+use regex::Regex;
 use std::collections::HashMap;
 
 pub fn run_cargo_update(temp_path: &std::path::Path, verbose: bool) -> Result<()> {
@@ -266,7 +267,14 @@ pub fn print_changelog_entries(
                             }
                         }
                         if !found {
-                            println!("- {}: <could not fetch or parse changelog>", pkg.name);
+                            // Try GitHub releases page as fallback
+                            if let Some(notes) =
+                                try_fetch_github_release_notes(&repo_url, &pkg.version.to_string())
+                            {
+                                println!("- {} (from GitHub releases):\n{}", pkg.name, notes);
+                            } else {
+                                println!("- {}: <could not fetch or parse changelog>", pkg.name);
+                            }
                         }
                     } else {
                         println!("- {}: <no GitHub repository>", pkg.name);
@@ -339,11 +347,9 @@ fn print_changelog_diff_for_crate(
                         if let Ok(text) = resp.text() {
                             println!("Changelog diff for {}:", updated.name);
                             let to = updated.version.to_string();
-                            let re = regex::Regex::new(&format!(
-                                r"^#+\s*\[?v?{}\]?\s*$",
-                                regex::escape(&to)
-                            ))
-                            .unwrap();
+                            let re =
+                                Regex::new(&format!(r"^#+\s*\[?v?{}\]?\s*$", regex::escape(&to)))
+                                    .unwrap();
                             let mut lines = text.lines().peekable();
                             let mut printing = false;
                             let mut count = 0;
@@ -358,7 +364,7 @@ fn print_changelog_diff_for_crate(
                                     if let Some(next_line) = lines.peek() {
                                         if next_line.trim_start().starts_with('#') {
                                             let next_header_re =
-                                                regex::Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
+                                                Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
                                             if next_header_re.is_match(next_line.trim_start()) {
                                                 break;
                                             }
@@ -392,6 +398,39 @@ fn print_changelog_diff_for_crate(
     } else {
         println!("    <no repository specified>");
     }
+}
+
+fn try_fetch_github_release_notes(repo_url: &str, version: &str) -> Option<String> {
+    // Only handle github.com URLs
+    if !repo_url.contains("github.com") {
+        return None;
+    }
+    // Extract owner/repo
+    let parts: Vec<&str> = repo_url.trim_end_matches(".git").split('/').collect();
+    if parts.len() < 5 {
+        return None;
+    }
+    let owner = parts[3];
+    let repo = parts[4];
+    let releases_url = format!("https://github.com/{}/{}/releases", owner, repo);
+    if let Ok(resp) = reqwest::blocking::get(&releases_url) {
+        if resp.status().is_success() {
+            if let Ok(text) = resp.text() {
+                // Try to find the release section for the version
+                let re = Regex::new(&format!(
+                    r#"(?s)##\s*{}[\s\S]*?(?=##|$)"#,
+                    regex::escape(version)
+                ))
+                .unwrap();
+                if let Some(mat) = re.find(&text) {
+                    let section = mat.as_str().trim();
+                    // Clean up markdown headers
+                    return Some(section.replace("\r", "").to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn print_minimal_updated_crates(
