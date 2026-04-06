@@ -1,6 +1,6 @@
+use crate::github_api::fetch_release_notes_from_github_api;
 use anyhow::Result;
 use cargo_metadata::MetadataCommand;
-use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 
@@ -319,7 +319,7 @@ pub fn print_single_crate_update(
 }
 
 fn print_changelog_diff_for_crate_verbose(
-    orig: &cargo_metadata::Package,
+    _orig: &cargo_metadata::Package,
     updated: &cargo_metadata::Package,
     verbose: bool,
     crate_name: &str,
@@ -524,12 +524,17 @@ fn try_fetch_github_release_notes(repo_url: &str, version: &str) -> Option<Strin
     }
     let owner = parts[3];
     let repo = parts[4];
+    // Try to fetch release notes from the tag page (HTML scraping)
     let html = fetch_github_release_tag_html(owner, repo, version)?;
     let blocks = extract_markdown_body_blocks(&html);
     if let Some(plain) = extract_first_meaningful_block(&blocks, version) {
         return Some(plain);
     }
-    extract_fallback_article_content(&html)
+    if let Some(article) = extract_fallback_article_content(&html) {
+        return Some(article);
+    }
+    // If all else fails, try the GitHub API (if token is set)
+    fetch_release_notes_from_github_api(owner, repo, version)
 }
 
 pub fn print_minimal_updated_crates(

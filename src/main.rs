@@ -1,3 +1,5 @@
+pub mod github_api;
+
 mod ops;
 mod util;
 
@@ -13,7 +15,7 @@ use ops::{
 use util::setup_temp_workspace;
 
 fn main() -> Result<()> {
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
+    let args = env::args().skip(1).collect::<Vec<_>>();
     let verbose = args.iter().any(|arg| arg == "-v" || arg == "--verbose");
     let crate_arg = args
         .iter()
