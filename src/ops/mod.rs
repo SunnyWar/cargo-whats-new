@@ -2,7 +2,6 @@ use crate::github_api::fetch_release_notes_from_github_api;
 use anyhow::Result;
 use cargo_metadata::MetadataCommand;
 use std::collections::HashMap;
-use std::fs;
 
 pub fn run_cargo_update(temp_path: &std::path::Path, verbose: bool) -> Result<()> {
     use std::process::{Command, Stdio};
@@ -414,116 +413,6 @@ fn print_changelog_diff_for_crate_verbose(
     }
 }
 
-fn fetch_github_release_tag_html(owner: &str, repo: &str, version: &str) -> Option<String> {
-    let tag_variants = [version.to_string(), format!("v{}", version)];
-    for tag in &tag_variants {
-        let tag_url = format!("https://github.com/{}/{}/releases/tag/{}", owner, repo, tag);
-        if let Ok(resp) = reqwest::blocking::get(&tag_url) {
-            if resp.status().is_success() {
-                if let Ok(text) = resp.text() {
-                    let _ = fs::write("release_debug.html", &text);
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "[DEBUG] Saved fetched HTML to release_debug.html ({} bytes)",
-                        text.len()
-                    );
-                    #[cfg(debug_assertions)]
-                    eprintln!(
-                        "[DEBUG] Fetched tag page: {} ({} bytes)",
-                        tag_url,
-                        text.len()
-                    );
-                    return Some(text);
-                }
-            } else {
-                eprintln!(
-                    "[DEBUG] Failed to fetch tag page: {} (status: {})",
-                    tag_url,
-                    resp.status()
-                );
-            }
-        } else {
-            #[cfg(debug_assertions)]
-            eprintln!("[DEBUG] Error fetching tag page: {}", tag_url);
-        }
-    }
-    None
-}
-
-fn extract_markdown_body_blocks(html: &str) -> Vec<String> {
-    let mut blocks = Vec::new();
-    let mut offset = 0;
-    while let Some(start) = html[offset..].find("<div class=\"markdown-body") {
-        let abs_start = offset + start;
-        let after = &html[abs_start..];
-        if let Some(end) = after.find("</div>") {
-            let block = &after[..end + 6];
-            blocks.push(block.to_string());
-            offset = abs_start + end + 6;
-        } else {
-            break;
-        }
-    }
-    #[cfg(debug_assertions)]
-    eprintln!("[DEBUG] Found {} markdown-body blocks", blocks.len());
-    blocks
-}
-
-fn html_to_plain_text(html: &str) -> String {
-    let plain = html.replace("<br>", "\n");
-    let plain = regex::Regex::new(r"<[^>]+>")
-        .unwrap()
-        .replace_all(&plain, "");
-    let plain = html_escape::decode_html_entities(&plain);
-    plain.trim().to_string()
-}
-
-fn extract_first_meaningful_block(blocks: &[String], version: &str) -> Option<String> {
-    // Prefer a block containing the version string, else the largest block
-    let mut best: Option<&String> = None;
-    for block in blocks {
-        let plain = html_to_plain_text(block);
-        if plain.contains(version) && plain.len() > 20 {
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[DEBUG] Selected markdown-body block with version ({} chars)",
-                plain.len()
-            );
-            return Some(plain);
-        }
-        if best.is_none() || plain.len() > html_to_plain_text(best.unwrap()).len() {
-            best = Some(block);
-        }
-    }
-    best.map(|b| {
-        let plain = html_to_plain_text(b);
-        #[cfg(debug_assertions)]
-        eprintln!(
-            "[DEBUG] Selected largest markdown-body block ({} chars)",
-            plain.len()
-        );
-        plain
-    })
-}
-
-fn extract_fallback_article_content(html: &str) -> Option<String> {
-    if let Some(start) = html.find("<article") {
-        let after = &html[start..];
-        if let Some(end) = after.find("</article>") {
-            let block = &after[..end + 10];
-            let plain = html_to_plain_text(block);
-            let lines: Vec<_> = plain.lines().filter(|l| !l.trim().is_empty()).collect();
-            if !lines.is_empty() {
-                let result = lines.join("\n");
-                #[cfg(debug_assertions)]
-                eprintln!("[DEBUG] Fallback article content ({} chars)", result.len());
-                return Some(result);
-            }
-        }
-    }
-    None
-}
-
 fn try_fetch_github_release_notes(repo_url: &str, version: &str) -> Option<String> {
     if !repo_url.contains("github.com") {
         return None;
@@ -534,15 +423,7 @@ fn try_fetch_github_release_notes(repo_url: &str, version: &str) -> Option<Strin
     }
     let owner = parts[3];
     let repo = parts[4];
-    // Try to fetch release notes from the tag page (HTML scraping)
-    let html = fetch_github_release_tag_html(owner, repo, version)?;
-    let blocks = extract_markdown_body_blocks(&html);
-    if let Some(plain) = extract_first_meaningful_block(&blocks, version) {
-        return Some(plain);
-    }
-    if let Some(article) = extract_fallback_article_content(&html) {
-        return Some(article);
-    }
+
     // If all else fails, try the GitHub API (if token is set)
     fetch_release_notes_from_github_api(owner, repo, version)
 }
