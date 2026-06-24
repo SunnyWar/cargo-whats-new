@@ -68,10 +68,10 @@ pub fn diff_package_versions(
     }
     println!("\nDependency changes (old → new):");
     for (key, old_ver) in &orig_map {
-        if let Some(new_ver) = updated_map.get(key) {
-            if old_ver != new_ver {
-                println!("- {} ({} → {})", key.0, old_ver, new_ver);
-            }
+        if let Some(new_ver) = updated_map.get(key)
+            && old_ver != new_ver
+        {
+            println!("- {} ({} → {})", key.0, old_ver, new_ver);
         }
     }
 }
@@ -96,10 +96,10 @@ pub fn report_updated_crates(
     }
     let mut changed = Vec::new();
     for pkg in updated {
-        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
-            if orig_pkg.version != pkg.version {
-                changed.push((&pkg.name, &orig_pkg.version, &pkg.version));
-            }
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name)
+            && orig_pkg.version != pkg.version
+        {
+            changed.push((&pkg.name, &orig_pkg.version, &pkg.version));
         }
     }
     if !changed.is_empty() {
@@ -134,17 +134,15 @@ pub fn print_github_compare_links(
     }
     println!("\nGitHub compare links for updated crates:");
     for pkg in updated {
-        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
-            if orig_pkg.version != pkg.version {
-                if let Some(repo) = &pkg.repository {
-                    if repo.contains("github.com") {
-                        let from = orig_pkg.version.to_string();
-                        let to = pkg.version.to_string();
-                        let repo_url = repo.trim_end_matches(".git");
-                        println!("- {}: {}/compare/v{}...v{}", pkg.name, repo_url, from, to);
-                    }
-                }
-            }
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name)
+            && orig_pkg.version != pkg.version
+            && let Some(repo) = &pkg.repository
+            && repo.contains("github.com")
+        {
+            let from = orig_pkg.version.to_string();
+            let to = pkg.version.to_string();
+            let repo_url = repo.trim_end_matches(".git");
+            println!("- {}: {}/compare/v{}...v{}", pkg.name, repo_url, from, to);
         }
     }
 }
@@ -159,8 +157,8 @@ pub fn print_changelog_links(
     }
     println!("\nGuessed changelog links for updated crates:");
     for pkg in updated {
-        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
-            if orig_pkg.version != pkg.version {
+        match original.iter().find(|p| p.name == pkg.name) {
+            Some(orig_pkg) if orig_pkg.version != pkg.version => {
                 if let Some(repo) = &pkg.repository {
                     if repo.contains("github.com") {
                         let mut repo_url = repo
@@ -181,12 +179,12 @@ pub fn print_changelog_links(
                                 "https://github.com/",
                                 "https://raw.githubusercontent.com/",
                             ) + &format!("/{}/CHANGELOG.md", branch);
-                            if let Ok(resp) = reqwest::blocking::get(&raw_url) {
-                                if resp.status().is_success() {
-                                    println!("- {}: {}", pkg.name, changelog_url);
-                                    found = true;
-                                    break;
-                                }
+                            if let Ok(resp) = reqwest::blocking::get(&raw_url)
+                                && resp.status().is_success()
+                            {
+                                println!("- {}: {}", pkg.name, changelog_url);
+                                found = true;
+                                break;
                             }
                         }
                         if !found {
@@ -202,6 +200,7 @@ pub fn print_changelog_links(
                     println!("- {}: <no repository specified>", pkg.name);
                 }
             }
+            _ => (),
         }
     }
 }
@@ -216,75 +215,73 @@ pub fn print_changelog_entries(
     }
     println!("\nExtracted changelog entries for updated crates:");
     for pkg in updated {
-        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
-            if orig_pkg.version != pkg.version {
-                if let Some(repo) = &pkg.repository {
-                    if repo.contains("github.com") {
-                        let mut repo_url = repo
-                            .trim_end_matches(".git")
-                            .trim_end_matches('/')
-                            .to_string();
-                        if let Some(idx) = repo_url.find("/tree/") {
-                            repo_url.truncate(idx);
-                        } else if let Some(idx) = repo_url.find("/blob/") {
-                            repo_url.truncate(idx);
-                        }
-                        let branches = ["master", "main"];
-                        let mut found = false;
-                        for branch in &branches {
-                            let raw_url = repo_url.replace(
-                                "https://github.com/",
-                                "https://raw.githubusercontent.com/",
-                            ) + &format!("/{}/CHANGELOG.md", branch);
-                            if let Ok(resp) = reqwest::blocking::get(&raw_url) {
-                                if resp.status().is_success() {
-                                    if let Ok(text) = resp.text() {
-                                        println!("- {}:", pkg.name);
-                                        let version_header = format!("{}", pkg.version);
-                                        let mut lines = text.lines();
-                                        let mut printing = false;
-                                        let mut count = 0;
-                                        while let Some(line) = lines.next() {
-                                            if line.contains(&version_header) {
-                                                printing = true;
-                                            } else if printing && line.starts_with('#') {
-                                                break;
-                                            }
-                                            if printing {
-                                                println!("    {}", line);
-                                                count += 1;
-                                                if count >= 10 {
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        if !printing {
-                                            for line in text.lines().take(10) {
-                                                println!("    {}", line);
-                                            }
-                                        }
-                                        found = true;
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name)
+            && orig_pkg.version != pkg.version
+        {
+            if let Some(repo) = &pkg.repository {
+                if repo.contains("github.com") {
+                    let mut repo_url = repo
+                        .trim_end_matches(".git")
+                        .trim_end_matches('/')
+                        .to_string();
+                    if let Some(idx) = repo_url.find("/tree/") {
+                        repo_url.truncate(idx);
+                    } else if let Some(idx) = repo_url.find("/blob/") {
+                        repo_url.truncate(idx);
+                    }
+                    let branches = ["master", "main"];
+                    let mut found = false;
+                    for branch in &branches {
+                        let raw_url = repo_url
+                            .replace("https://github.com/", "https://raw.githubusercontent.com/")
+                            + &format!("/{}/CHANGELOG.md", branch);
+                        if let Ok(resp) = reqwest::blocking::get(&raw_url)
+                            && resp.status().is_success()
+                            && let Ok(text) = resp.text()
+                        {
+                            println!("- {}:", pkg.name);
+                            let version_header = format!("{}", pkg.version);
+                            let lines = text.lines();
+                            let mut printing = false;
+                            let mut count = 0;
+                            for line in lines {
+                                if line.contains(&version_header) {
+                                    printing = true;
+                                } else if printing && line.starts_with('#') {
+                                    break;
+                                }
+                                if printing {
+                                    println!("    {}", line);
+                                    count += 1;
+                                    if count >= 10 {
                                         break;
                                     }
                                 }
                             }
-                        }
-                        if !found {
-                            // Try GitHub releases page as fallback
-                            if let Some(notes) =
-                                try_fetch_github_release_notes(&repo_url, &pkg.version.to_string())
-                            {
-                                println!("- {} (from GitHub releases):\n{}", pkg.name, notes);
-                            } else {
-                                println!("- {}: <could not fetch or parse changelog>", pkg.name);
+                            if !printing {
+                                for line in text.lines().take(10) {
+                                    println!("    {}", line);
+                                }
                             }
+                            found = true;
+                            break;
                         }
-                    } else {
-                        println!("- {}: <no GitHub repository>", pkg.name);
+                    }
+                    if !found {
+                        // Try GitHub releases page as fallback
+                        if let Some(notes) =
+                            try_fetch_github_release_notes(&repo_url, &pkg.version.to_string())
+                        {
+                            println!("- {} (from GitHub releases):\n{}", pkg.name, notes);
+                        } else {
+                            println!("- {}: <could not fetch or parse changelog>", pkg.name);
+                        }
                     }
                 } else {
-                    println!("- {}: <no repository specified>", pkg.name);
+                    println!("- {}: <no GitHub repository>", pkg.name);
                 }
+            } else {
+                println!("- {}: <no repository specified>", pkg.name);
             }
         }
     }
@@ -346,53 +343,44 @@ fn print_changelog_diff_for_crate_verbose(
                 let raw_url = repo_url
                     .replace("https://github.com/", "https://raw.githubusercontent.com/")
                     + &format!("/{}/CHANGELOG.md", branch);
-                if let Ok(resp) = reqwest::blocking::get(&raw_url) {
-                    if resp.status().is_success() {
-                        if let Ok(text) = resp.text() {
-                            println!("Changelog diff for {}:", updated.name);
-                            let to = updated.version.to_string();
-                            let re = regex::Regex::new(&format!(
-                                r"^#+\s*\[?v?{}\]?\s*$",
-                                regex::escape(&to)
-                            ))
+                if let Ok(resp) = reqwest::blocking::get(&raw_url)
+                    && resp.status().is_success()
+                    && let Ok(text) = resp.text()
+                {
+                    println!("Changelog diff for {}:", updated.name);
+                    let to = updated.version.to_string();
+                    let re =
+                        regex::Regex::new(&format!(r"^#+\s*\[?v?{}\]?\s*$", regex::escape(&to)))
                             .unwrap();
-                            let mut lines = text.lines().peekable();
-                            let mut printing = false;
-                            let mut count = 0;
-                            while let Some(line) = lines.next() {
-                                if !printing {
-                                    if re.is_match(line) {
-                                        printing = true;
-                                        println!("    {}", line);
-                                        count += 1;
-                                    }
-                                } else {
-                                    if let Some(next_line) = lines.peek() {
-                                        if next_line.trim_start().starts_with('#') {
-                                            let next_header_re =
-                                                regex::Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
-                                            if next_header_re.is_match(next_line.trim_start()) {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    println!("    {}", line);
-                                    count += 1;
-                                    if count >= 100 {
-                                        break;
-                                    }
-                                }
+                    let mut lines = text.lines().peekable();
+                    let mut printing = false;
+                    let mut count = 0;
+                    let next_header_re = regex::Regex::new(r"^#+\s*\[?v?[0-9]+\.").unwrap();
+                    while let Some(line) = lines.next() {
+                        if !printing {
+                            if re.is_match(line) {
+                                printing = true;
+                                println!("    {}", line);
+                                count += 1;
                             }
-                            if !printing {
-                                println!(
-                                    "    (Could not find changelog section for version {})",
-                                    to
-                                );
+                        } else {
+                            match lines.peek() {
+                                Some(next_line) if next_line.trim_start().starts_with('#')
+                                    && next_header_re.is_match(next_line.trim_start()) => break,
+                                _ => (),
                             }
-                            found = true;
-                            break;
+                            println!("    {}", line);
+                            count += 1;
+                            if count >= 100 {
+                                break;
+                            }
                         }
                     }
+                    if !printing {
+                        println!("    (Could not find changelog section for version {})", to);
+                    }
+                    found = true;
+                    break;
                 }
             }
             if !found {
@@ -434,10 +422,10 @@ pub fn print_minimal_updated_crates(
 ) {
     let mut changed = Vec::new();
     for pkg in updated {
-        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name) {
-            if orig_pkg.version != pkg.version {
-                changed.push((&pkg.name, &orig_pkg.version, &pkg.version));
-            }
+        if let Some(orig_pkg) = original.iter().find(|p| p.name == pkg.name)
+            && orig_pkg.version != pkg.version
+        {
+            changed.push((&pkg.name, &orig_pkg.version, &pkg.version));
         }
     }
     if changed.is_empty() {

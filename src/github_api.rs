@@ -28,12 +28,12 @@ pub fn fetch_release_notes_from_github_api(
         Ok(resp) if resp.status().is_success() => match resp.text() {
             Ok(text) => {
                 if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                    if let Some(body) = json.get("body").and_then(|b| b.as_str()) {
-                        if !body.trim().is_empty() {
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG] Got release notes from GitHub API");
-                            return Some(body.trim().to_string());
-                        }
+                    if let Some(body) = json.get("body").and_then(|b| b.as_str())
+                        && !body.trim().is_empty()
+                    {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Got release notes from GitHub API");
+                        return Some(body.trim().to_string());
                     }
                 } else {
                     #[cfg(debug_assertions)]
