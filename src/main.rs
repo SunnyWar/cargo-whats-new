@@ -23,7 +23,16 @@ fn main() -> Result<()> {
         .cloned();
     let metadata = MetadataCommand::new().exec()?;
     println!("Workspace root: {}", metadata.workspace_root);
-    let temp_dir = setup_temp_workspace(metadata.workspace_root.as_str(), verbose)?;
+    let member_dirs: Vec<std::path::PathBuf> = metadata
+        .workspace_members
+        .iter()
+        .filter_map(|id| metadata.packages.iter().find(|p| &p.id == id))
+        .filter_map(|pkg| pkg.manifest_path.parent())
+        .filter_map(|dir| dir.strip_prefix(&metadata.workspace_root).ok())
+        .filter(|rel| !rel.as_str().is_empty())
+        .map(|rel| rel.as_std_path().to_path_buf())
+        .collect();
+    let temp_dir = setup_temp_workspace(metadata.workspace_root.as_str(), &member_dirs, verbose)?;
     run_cargo_update(temp_dir.path(), verbose)?;
     let updated_metadata = load_metadata_from_path(temp_dir.path(), verbose)?;
     if let Some(crate_name) = crate_arg {

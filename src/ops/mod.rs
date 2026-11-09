@@ -365,8 +365,12 @@ fn print_changelog_diff_for_crate_verbose(
                             }
                         } else {
                             match lines.peek() {
-                                Some(next_line) if next_line.trim_start().starts_with('#')
-                                    && next_header_re.is_match(next_line.trim_start()) => break,
+                                Some(next_line)
+                                    if next_line.trim_start().starts_with('#')
+                                        && next_header_re.is_match(next_line.trim_start()) =>
+                                {
+                                    break;
+                                }
                                 _ => (),
                             }
                             println!("    {}", line);
